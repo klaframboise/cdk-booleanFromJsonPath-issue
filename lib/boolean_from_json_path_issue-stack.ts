@@ -1,16 +1,40 @@
-import * as cdk from 'aws-cdk-lib';
-import { Construct } from 'constructs';
-// import * as sqs from 'aws-cdk-lib/aws-sqs';
+import * as cdk from "aws-cdk-lib";
+import * as sfn from "aws-cdk-lib/aws-stepfunctions";
+import * as tasks from "aws-cdk-lib/aws-stepfunctions-tasks";
+import * as dynamo from "aws-cdk-lib/aws-dynamodb";
+import { DynamoAttributeValue } from "aws-cdk-lib/aws-stepfunctions-tasks";
+
+import { Construct } from "constructs";
 
 export class BooleanFromJsonPathIssueStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
     super(scope, id, props);
 
-    // The code that defines your stack goes here
+    const table = new dynamo.TableV2(this, "Table", {
+      partitionKey: { type: dynamo.AttributeType.STRING, name: "pk" }
+    });
 
-    // example resource
-    // const queue = new sqs.Queue(this, 'BooleanFromJsonPathIssueQueue', {
-    //   visibilityTimeout: cdk.Duration.seconds(300)
-    // });
+    const passBoolValue = new sfn.Pass(this, "PassBoolean", {
+      parameters: {
+        "inputValue": true,
+        "testValue": "foo"
+      }
+    });
+
+    const putItem = new tasks.DynamoPutItem(this, "PutItemWithBooleanFromJsonPath", {
+      table,
+      item: {
+        pk: DynamoAttributeValue.fromString("demo"),
+        boolValue: DynamoAttributeValue.booleanFromJsonPath("$.inputValue"),
+        stringValue: DynamoAttributeValue.fromString(sfn.JsonPath.stringAt("$.testValue"))
+      }
+    });
+
+    new sfn.StateMachine(this, "BooleanFromJsonPathIssueDemo", {
+      definitionBody: sfn.DefinitionBody.fromChainable(
+        passBoolValue
+          .next(putItem)
+      )
+    });
   }
 }
